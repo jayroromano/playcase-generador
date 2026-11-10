@@ -202,8 +202,9 @@ function pintar(list) {
   [...document.querySelectorAll('.res')].forEach(b => b.onclick = () => elegir(list[+b.dataset.i]));
 }
 
-/* el proxy /api/img descarga la carátula por nosotros: mismo origen → exportación PNG sin bloqueos */
-const proxy = u => '/api/img?u=' + encodeURIComponent(u);
+/* el proxy /api/img descarga la carátula por nosotros: mismo origen → exportación PNG sin bloqueos.
+   La contraseña viaja en la URL porque las etiquetas <img> no pueden enviar cabeceras. */
+const proxy = u => '/api/img?u=' + encodeURIComponent(u) + '&key=' + encodeURIComponent(KEY);
 
 function elegir(it) {
   setCover(proxy(it.art));
