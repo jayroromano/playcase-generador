@@ -1,0 +1,285 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Playcase · Generador de diseños</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+<style>
+  :root{
+    --txt:#fff;
+    --muted:#b9b9b9;
+    --stage1:#d9d9de;
+    --stage2:#f5f5f7;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;font-family:"Segoe UI",Helvetica,Arial,sans-serif;background:#101014;color:#eee}
+  header{padding:14px 22px;border-bottom:1px solid #2a2a30;display:flex;align-items:center;gap:10px}
+  header .logo{font-weight:800;letter-spacing:2px}
+  header .logo b{color:#17b04a}
+  header small{color:#888}
+  .layout{display:flex;gap:24px;padding:22px;align-items:flex-start;flex-wrap:wrap}
+  .panel{width:330px;background:#17171c;border:1px solid #2a2a30;border-radius:12px;padding:18px;display:flex;flex-direction:column;gap:12px}
+  .panel label{font-size:12px;color:#9a9aa2;text-transform:uppercase;letter-spacing:.6px}
+  .panel input[type=text],.panel input:not([type]){
+    width:100%;padding:9px 10px;border-radius:8px;border:1px solid #33333b;background:#0d0d10;color:#eee;font-size:14px}
+  .panel button{padding:10px;border-radius:8px;border:0;font-weight:700;cursor:pointer;font-size:14px}
+  #btnSpotify{background:#17b04a;color:#fff}
+  #btnSpotify:hover{background:#1bc653}
+  #btnPng{background:#2f6fed;color:#fff}
+  #btnPng:hover{background:#3f7cf3}
+  .row{display:flex;gap:8px}
+  .row>*{flex:1}
+  .chk{display:flex;align-items:center;gap:8px;font-size:13px;color:#ccc;text-transform:none;letter-spacing:0}
+  #spStatus{font-size:12px;color:#888;min-height:15px}
+  #spStatus.err{color:#ff7a7a}
+  #spStatus.ok{color:#5bd98a}
+  #results{display:flex;flex-direction:column;gap:6px;max-height:220px;overflow:auto}
+  .res{display:flex;gap:10px;align-items:center;background:#0d0d10;border:1px solid #33333b;border-radius:8px;padding:6px;color:#eee;cursor:pointer;text-align:left}
+  .res:hover{border-color:#17b04a}
+  .res img{width:44px;height:44px;border-radius:4px;object-fit:cover;flex:none}
+  .res span{font-size:12.5px;line-height:1.35}
+  .res i{color:#8a8a92;font-style:normal;font-size:11px}
+  #stage{
+    width:600px;max-width:95vw;border-radius:18px;padding:40px 0;
+    background:linear-gradient(160deg,var(--stage1),var(--stage2));
+    display:flex;justify-content:center;
+  }
+  #design{
+    width:460px;
+    display:flex;flex-direction:column;align-items:center;
+    color:var(--txt);
+  }
+  #brand{font-weight:800;letter-spacing:3px;font-size:20px;margin-bottom:18px}
+  #coverBox{width:330px;height:330px;background:#202024;display:flex;align-items:center;justify-content:center;overflow:hidden}
+  #coverBox img{width:100%;height:100%;object-fit:cover;display:block}
+  #coverBox .ph{color:#666;font-size:13px;text-align:center;padding:10px}
+  #titleOut{margin-top:26px;font-size:27px;font-weight:800;letter-spacing:.5px;text-transform:uppercase;text-align:center;max-width:420px;line-height:1.1}
+  #artistOut{margin-top:6px;font-size:19px;color:var(--muted);text-align:center;max-width:420px;line-height:1.2}
+  #player{width:330px;margin-top:26px}
+  .bar{position:relative;height:4px;background:currentColor;opacity:.95;border-radius:2px}
+  .bar .knob{position:absolute;top:50%;transform:translate(-50%,-50%);width:13px;height:13px;border-radius:50%;background:currentColor;box-shadow:0 0 0 1px rgba(0,0,0,.15)}
+  .times{display:flex;justify-content:space-between;font-size:12px;margin-top:6px;color:var(--txt);opacity:.9}
+  .icons{display:flex;justify-content:space-between;align-items:center;margin-top:18px;padding:0 6px}
+  .icons svg{width:30px;height:30px}
+  .icons .main svg{width:64px;height:64px}
+  .hint{color:#77777f;font-size:12.5px;margin-top:12px;max-width:600px;line-height:1.5}
+  .note{background:#17171c;border:1px solid #2a2a30;border-radius:12px;padding:14px 16px;margin:0 22px 24px;color:#9a9aa2;font-size:13px;line-height:1.6;max-width:calc(600px + 44px)}
+  .note b{color:#ddd}
+</style>
+</head>
+<body>
+<header>
+  <div class="logo">PL<b>A</b>YCASE</div>
+  <small>· generador de diseños</small>
+</header>
+
+<div class="layout">
+  <div class="panel">
+    <label>Búsqueda de carátula (canción + artista)</label>
+    <input id="qSong" type="text" placeholder="Canción, ej: La Graciosa">
+    <input id="qArtist" type="text" placeholder="Artista, ej: Quevedo" style="margin-top:8px">
+    <button id="btnSearch">Buscar carátula</button>
+    <div id="spStatus"></div>
+    <div id="results"></div>
+
+    <label>… o pega el enlace de la canción (Spotify / Apple Music)</label>
+    <input id="qUrl" type="text" placeholder="https://open.spotify.com/track/…">
+    <button id="btnUrl" style="margin-top:8px">Cargar por enlace</button>
+
+    <label>… o sube la carátula manualmente</label>
+    <input id="fileImg" type="file" accept="image/*">
+
+    <label>Título de la canción</label>
+    <input id="title" type="text" placeholder="LA GRACIOSA">
+
+    <label>Artista</label>
+    <input id="artist" type="text" placeholder="Quevedo, Elvis Crespo">
+
+    <div class="row">
+      <div style="flex:1"><label>Transcurrido</label><input id="t1" type="text" value="0:00"></div>
+      <div style="flex:1"><label>Duración</label><input id="t2" type="text" value="4:17"></div>
+    </div>
+
+    <label>Progreso: <span id="progVal">40%</span></label>
+    <input id="prog" type="range" min="0" max="100" value="40" style="width:100%">
+
+    <label class="chk"><input id="whiteText" type="checkbox" checked> Texto e iconos en blanco</label>
+    <label class="chk"><input id="brand" type="checkbox"> Mostrar marca PLAYCASE</label>
+
+    <label>Nombre de archivo</label>
+    <input id="fname" type="text" placeholder="1201_la-graciosa">
+
+    <button id="btnPng">Descargar PNG (fondo transparente)</button>
+    <button id="btnPngDark" style="background:#3a3a42;color:#fff">Descargar comprobación (fondo oscuro)</button>
+  </div>
+
+  <div>
+    <div id="stage">
+      <div id="design">
+        <div id="brand" style="display:none">PL<b style="color:#17b04a">A</b>YCASE</div>
+        <div id="coverBox"><div class="ph">Pega un enlace de Spotify<br>o sube una imagen</div></div>
+        <div id="titleOut">TU CANCIÓN</div>
+        <div id="artistOut">Artista / Grupo</div>
+        <div id="player">
+          <div class="bar"><div class="knob" id="knob"></div></div>
+          <div class="times"><span id="time1">0:00</span><span id="time2">4:17</span></div>
+          <div class="icons">
+            <svg viewBox="0 0 24 24" fill="currentColor"><path d="M10.59 9.17 5.41 4 4 5.41l5.17 5.17 1.42-1.41zM14.5 4l2.04 2.04L4 18.59 5.41 20 17.96 7.46 20 9.5V4h-5.5zm.33 9.41-1.41 1.41 3.13 3.13L14.5 20H20v-5.5l-2.04 2.04-3.13-3.13z"/></svg>
+            <svg viewBox="0 0 24 24" fill="currentColor"><path d="M6 6h2v12H6zm3.5 6 8.5 6V6z"/></svg>
+            <span class="main">
+              <svg viewBox="0 0 24 24" fill="currentColor">
+                <defs><mask id="pauseMask"><rect width="24" height="24" fill="#fff"/><rect x="9.2" y="7" width="2" height="10" rx="1" fill="#000"/><rect x="12.8" y="7" width="2" height="10" rx="1" fill="#000"/></mask></defs>
+                <circle cx="12" cy="12" r="10" mask="url(#pauseMask)"/>
+              </svg>
+            </span>
+            <svg viewBox="0 0 24 24" fill="currentColor"><path d="M6 18l8.5-6L6 6v12zM16 6v12h2V6h-2z"/></svg>
+            <svg viewBox="0 0 24 24" fill="currentColor"><path d="M20 2H4c-1.1 0-2 .9-2 2v18l4-4h14c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2z"/></svg>
+          </div>
+        </div>
+      </div>
+    </div>
+    <p class="hint">
+      El PNG exportado tiene <b style="color:#aaa">fondo transparente</b>: solo se imprime la carátula, el texto y los iconos,
+      igual que en las muestras. Tamaño de exportación: 920 × alto a 2× (≈300 dpi en la funda).
+    </p>
+  </div>
+</div>
+
+<div class="note">
+  <b>Cómo usarlo con cada pedido:</b> busca la canción con el nombre y artista que dejó el cliente en el pedido (o pega su enlace de
+  Spotify/Apple Music) → elige la versión correcta → ajusta el nombre de archivo al nº de pedido Shopify (ej. <b>1201_la-graciosa</b>) →
+  descarga el PNG → revísalo → mándalo al proveedor por el chat de AliExpress con el nº de pedido.
+  Si la canción no aparece (o es una versión rara), sube la carátula manualmente.
+  <br><b>Para enlaces de Spotify:</b> hay que dar de alta una vez (gratis) una app en <b>developer.spotify.com/dashboard</b>
+  con redirect URI <b>http://localhost:4173/</b> y guardar las claves en <b>spotify-credentials.json</b> (o en las variables de
+  entorno SPOTIFY_CLIENT_ID / SPOTIFY_CLIENT_SECRET en la web). Apple Music y la búsqueda por nombre funcionan sin configurar nada.
+</div>
+
+<script>
+const $=id=>document.getElementById(id);
+let coverSrc=null;
+
+/* ---- acceso con contraseña (si el servidor tiene ACCESS_KEY / access-key.txt) ---- */
+let KEY = localStorage.getItem('pc_key');
+if (KEY === null) { KEY = prompt('Contraseña de acceso (vacía si no hay clave configurada):') || ''; localStorage.setItem('pc_key', KEY); }
+const api = p => fetch(p, { headers: { 'x-key': KEY } });
+
+/* ---- búsqueda de carátula (iTunes + Deezer vía servidor) ---- */
+const EN_SERVIDOR = location.protocol.startsWith('http');
+if (!EN_SERVIDOR) {
+  $('btnSearch').disabled = true;
+  $('btnUrl').disabled = true;
+  $('spStatus').className = 'err';
+  $('spStatus').textContent = 'Abre la herramienta con "Iniciar Playcase.bat" (o la web desplegada) para poder buscar carátulas.';
+}
+
+$('btnSearch').onclick = async () => {
+  const st = $('spStatus');
+  const song = $('qSong').value.trim();
+  const artist = $('qArtist').value.trim();
+  if (!song && !artist) { st.className = 'err'; st.textContent = 'Escribe al menos la canción.'; return; }
+  st.className = ''; st.textContent = 'Buscando carátulas…';
+  $('results').innerHTML = '';
+  try {
+    const j = await (await api('/api/search?song=' + encodeURIComponent(song) + '&artist=' + encodeURIComponent(artist))).json();
+    if (j.error) throw new Error(j.error);
+    if (!j.results || !j.results.length) { st.className = 'err'; st.textContent = 'Sin resultados. Prueba con otros términos o sube la imagen a mano.'; return; }
+    st.className = 'ok'; st.textContent = j.results.length + ' resultados — elige uno:';
+    pintar(j.results);
+  } catch (e) {
+    st.className = 'err';
+    st.textContent = 'No se pudo buscar (' + e.message + '). Sube la imagen manualmente.';
+  }
+};
+
+function pintar(list) {
+  $('results').innerHTML = list.map((it, i) => `
+    <button class="res" data-i="${i}">
+      <img src="${esc(it.art)}" alt="">
+      <span><b>${esc(it.title)}</b><br>${esc(it.artist || '')}${it.album ? '<br><i>' + esc(it.album) + '</i>' : ''}</span>
+    </button>`).join('');
+  [...document.querySelectorAll('.res')].forEach(b => b.onclick = () => elegir(list[+b.dataset.i]));
+}
+
+/* el proxy /api/img descarga la carátula por nosotros: mismo origen → exportación PNG sin bloqueos */
+const proxy = u => '/api/img?u=' + encodeURIComponent(u);
+
+function elegir(it) {
+  setCover(proxy(it.art));
+  $('title').value = (it.title || '').toUpperCase();
+  $('title').dispatchEvent(new Event('input'));
+  $('artist').value = it.artist || '';
+  $('artist').dispatchEvent(new Event('input'));
+  if (!$('fname').value.trim()) $('fname').value = slug(it.title || '');
+  $('spStatus').className = 'ok';
+  $('spStatus').textContent = 'Carátula cargada ✔  (revisa título y artista)';
+  $('results').innerHTML = '';
+}
+
+$('btnUrl').onclick = async () => {
+  const st = $('spStatus');
+  const url = $('qUrl').value.trim();
+  if (!url) { st.className = 'err'; st.textContent = 'Pega un enlace primero.'; return; }
+  st.className = ''; st.textContent = 'Resolviendo el enlace…';
+  try {
+    const j = await (await api('/api/resolve?url=' + encodeURIComponent(url))).json();
+    if (j.error) { st.className = 'err'; st.textContent = j.error; return; }
+    elegir(j);
+  } catch (e) {
+    st.className = 'err';
+    st.textContent = 'No se pudo resolver (' + e.message + ').';
+  }
+};
+
+/* ---- carátula manual ---- */
+$('fileImg').onchange=e=>{
+  const f=e.target.files[0]; if(!f)return;
+  const fr=new FileReader();
+  fr.onload=()=>{setCover(fr.result);$('spStatus').className='ok';$('spStatus').textContent='Imagen cargada ✔';};
+  fr.readAsDataURL(f);
+};
+
+function setCover(src){
+  coverSrc=src;
+  $('coverBox').innerHTML=`<img src="${src}" alt="carátula">`;
+}
+
+/* ---- campos en vivo ---- */
+const bind=(inp,out,fn)=>{const u=()=>{ $(out).textContent=fn?fn($(inp).value):$(inp).value; };$(inp).oninput=u;u();};
+bind('title','titleOut',v=>v? esc(v.toUpperCase()):'TU CANCIÓN');
+bind('artist','artistOut',v=>v||'Artista / Grupo');
+bind('t1','time1');
+bind('t2','time2');
+$('prog').oninput=()=>{ $('progVal').textContent=$('prog').value+'%'; $('knob').style.left=$('prog').value+'%'; };
+$('prog').oninput();
+
+$('whiteText').onchange=$('brand').onchange=()=>{
+  document.documentElement.style.setProperty('--txt',$('whiteText').checked?'#fff':'#111');
+  document.documentElement.style.setProperty('--muted',$('whiteText').checked?'#b9b9b9':'#555');
+  $('brand').style.display=$('brand').checked?'block':'none';
+};
+
+function esc(s){const d=document.createElement('div');d.textContent=s;return d.innerHTML;}
+function slug(s){return s.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,'');}
+
+/* ---- exportar PNG ---- */
+async function exportar(bg,sufijo){
+  const el=$('design');
+  const name=($('fname').value.trim()||'playcase')+sufijo+'.png';
+  try{
+    const canvas=await html2canvas(el,{backgroundColor:bg,scale:2,useCORS:true});
+    canvas.toBlob(b=>{
+      const a=document.createElement('a');
+      a.href=URL.createObjectURL(b);a.download=name;a.click();
+      URL.revokeObjectURL(a.href);
+    },'image/png');
+  }catch(e){
+    alert('Error al exportar: '+e.message+'\nSi la carátula vino de Spotify, prueba a subirla manualmente (el navegador la bloquea para exportar).');
+  }
+}
+$('btnPng').onclick=()=>exportar(null,'');
+$('btnPngDark').onclick=()=>exportar('#232327','_prueba-fondo');
+</script>
+</body>
+</html>

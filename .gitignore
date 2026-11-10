@@ -1,0 +1,7 @@
+# Contraseñas y claves (NO subir a GitHub)
+access-key.txt
+spotify-credentials.json
+
+# Archivos generados por Vercel y dependencias
+.vercel/
+node_modules/
