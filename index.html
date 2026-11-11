@@ -14,11 +14,11 @@
   }
   *{box-sizing:border-box}
   body{margin:0;font-family:"Segoe UI",Helvetica,Arial,sans-serif;background:#101014;color:#eee}
-  header{padding:14px 22px;border-bottom:1px solid #2a2a30;display:flex;align-items:center;gap:10px}
+  header{padding:14px 22px;border-bottom:1px solid #2a2a30;display:flex;align-items:center;justify-content:center;gap:10px}
   header .logo{font-weight:800;letter-spacing:2px}
   header .logo b{color:#17b04a}
   header small{color:#888}
-  .layout{display:flex;gap:24px;padding:22px;align-items:flex-start;flex-wrap:wrap}
+  .layout{display:flex;gap:24px;padding:22px;align-items:flex-start;justify-content:center;flex-wrap:wrap;max-width:1240px;margin:0 auto}
   .panel{width:330px;background:#17171c;border:1px solid #2a2a30;border-radius:12px;padding:18px;display:flex;flex-direction:column;gap:12px}
   .panel label{font-size:12px;color:#9a9aa2;text-transform:uppercase;letter-spacing:.6px}
   .panel input[type=text],.panel input:not([type]){
@@ -57,15 +57,21 @@
   #titleOut{margin-top:26px;font-size:27px;font-weight:800;letter-spacing:.5px;text-transform:uppercase;text-align:center;max-width:420px;line-height:1.1}
   #artistOut{margin-top:6px;font-size:19px;color:var(--muted);text-align:center;max-width:420px;line-height:1.2}
   #player{width:330px;margin-top:26px}
-  .bar{position:relative;height:4px;background:currentColor;opacity:.95;border-radius:2px}
-  .bar .knob{position:absolute;top:50%;transform:translate(-50%,-50%);width:13px;height:13px;border-radius:50%;background:currentColor;box-shadow:0 0 0 1px rgba(0,0,0,.15)}
+  #previewProg{display:block;width:100%;height:18px;margin:0;appearance:none;-webkit-appearance:none;background:transparent;color:currentColor;cursor:pointer;--played:0%}
+  #previewProg::-webkit-slider-runnable-track{height:4px;border-radius:2px;background:linear-gradient(to right,currentColor var(--played),rgba(255,255,255,.55) var(--played))}
+  #previewProg::-moz-range-track{height:4px;border-radius:2px;background:rgba(255,255,255,.55)}
+  #previewProg::-moz-range-progress{height:4px;border-radius:2px;background:currentColor}
+  #previewProg::-webkit-slider-thumb{width:13px;height:13px;margin-top:-4.5px;border:0;border-radius:50%;background:currentColor;box-shadow:0 0 0 1px rgba(0,0,0,.15);-webkit-appearance:none}
+  #previewProg::-moz-range-thumb{width:13px;height:13px;border:0;border-radius:50%;background:currentColor;box-shadow:0 0 0 1px rgba(0,0,0,.15)}
+  #prog{width:100%;accent-color:#1682f4}
   .times{display:flex;justify-content:space-between;font-size:12px;margin-top:6px;color:var(--txt);opacity:.9}
   .icons{display:flex;justify-content:space-between;align-items:center;margin-top:18px;padding:0 6px}
   .icons svg{width:30px;height:30px}
   .icons .main svg{width:64px;height:64px}
   .hint{color:#77777f;font-size:12.5px;margin-top:12px;max-width:600px;line-height:1.5}
-  .note{background:#17171c;border:1px solid #2a2a30;border-radius:12px;padding:14px 16px;margin:0 22px 24px;color:#9a9aa2;font-size:13px;line-height:1.6;max-width:calc(600px + 44px)}
+  .note{background:#17171c;border:1px solid #2a2a30;border-radius:12px;padding:14px 16px;margin:0 auto 24px;color:#9a9aa2;font-size:13px;line-height:1.6;width:calc(100% - 44px);max-width:1240px}
   .note b{color:#ddd}
+  @media(max-width:700px){.layout{padding:16px;gap:18px}.panel{width:min(100%,420px)}#stage{width:min(600px,95vw)}#design{width:100%}.note{width:calc(100% - 32px)}}
 </style>
 </head>
 <body>
@@ -101,8 +107,8 @@
       <div style="flex:1"><label>Duración</label><input id="t2" type="text" value="4:17"></div>
     </div>
 
-    <label>Progreso: <span id="progVal">40%</span></label>
-    <input id="prog" type="range" min="0" max="100" value="40" style="width:100%">
+    <label>Progreso: <span id="progVal">0%</span></label>
+    <input id="prog" type="range" min="0" max="257" step="1" value="0" style="width:100%">
 
     <label class="chk"><input id="whiteText" type="checkbox" checked> Texto e iconos en blanco</label>
     <label class="chk"><input id="brand" type="checkbox"> Mostrar marca PLAYCASE</label>
@@ -122,7 +128,7 @@
         <div id="titleOut">TU CANCIÓN</div>
         <div id="artistOut">Artista / Grupo</div>
         <div id="player">
-          <div class="bar"><div class="knob" id="knob"></div></div>
+          <input id="previewProg" type="range" min="0" max="257" step="1" value="0" aria-label="Posición de la canción">
           <div class="times"><span id="time1">0:00</span><span id="time2">4:17</span></div>
           <div class="icons">
             <svg viewBox="0 0 24 24" fill="currentColor"><path d="M10.59 9.17 5.41 4 4 5.41l5.17 5.17 1.42-1.41zM14.5 4l2.04 2.04L4 18.59 5.41 20 17.96 7.46 20 9.5V4h-5.5zm.33 9.41-1.41 1.41 3.13 3.13L14.5 20H20v-5.5l-2.04 2.04-3.13-3.13z"/></svg>
@@ -250,10 +256,55 @@ function setCover(src){
 const bind=(inp,out,fn)=>{const u=()=>{ $(out).textContent=fn?fn($(inp).value):$(inp).value; };$(inp).oninput=u;u();};
 bind('title','titleOut',v=>v? esc(v.toUpperCase()):'TU CANCIÓN');
 bind('artist','artistOut',v=>v||'Artista / Grupo');
-bind('t1','time1');
-bind('t2','time2');
-$('prog').oninput=()=>{ $('progVal').textContent=$('prog').value+'%'; $('knob').style.left=$('prog').value+'%'; };
-$('prog').oninput();
+function parseTime(value){
+  const match=String(value).trim().match(/^(\d{1,3}):([0-5]\d)$/);
+  return match ? Number(match[1])*60+Number(match[2]) : null;
+}
+function formatTime(seconds){
+  const safe=Math.max(0,Math.floor(Number(seconds)||0));
+  return Math.floor(safe/60)+':'+String(safe%60).padStart(2,'0');
+}
+let durationSeconds=parseTime($('t2').value) ?? 257;
+let currentSeconds=parseTime($('t1').value) ?? 0;
+function syncPlayback(){
+  durationSeconds=Math.max(1,durationSeconds);
+  currentSeconds=Math.min(Math.max(0,currentSeconds),durationSeconds);
+  for(const id of ['prog','previewProg']){
+    $(id).max=String(durationSeconds);
+    $(id).value=String(currentSeconds);
+  }
+  $('t1').value=formatTime(currentSeconds);
+  $('time1').textContent=formatTime(currentSeconds);
+  $('time2').textContent=formatTime(durationSeconds);
+  const percent=(currentSeconds/durationSeconds)*100;
+  $('progVal').textContent=Math.round(percent)+'%';
+  $('previewProg').style.setProperty('--played',percent+'%');
+}
+function setPlaybackPosition(value){
+  currentSeconds=Math.round(Number(value)||0);
+  syncPlayback();
+}
+$('prog').addEventListener('input',()=>setPlaybackPosition($('prog').value));
+$('previewProg').addEventListener('input',()=>setPlaybackPosition($('previewProg').value));
+$('t1').addEventListener('input',()=>{
+  const parsed=parseTime($('t1').value);
+  if(parsed!==null)setPlaybackPosition(parsed);
+});
+$('t1').addEventListener('change',()=>{
+  const parsed=parseTime($('t1').value);
+  setPlaybackPosition(parsed===null?currentSeconds:parsed);
+});
+$('t2').addEventListener('input',()=>{
+  const parsed=parseTime($('t2').value);
+  if(parsed!==null){durationSeconds=Math.max(1,parsed);syncPlayback();}
+});
+$('t2').addEventListener('change',()=>{
+  const parsed=parseTime($('t2').value);
+  durationSeconds=parsed===null?durationSeconds:Math.max(1,parsed);
+  $('t2').value=formatTime(durationSeconds);
+  syncPlayback();
+});
+syncPlayback();
 
 $('whiteText').onchange=$('brand').onchange=()=>{
   document.documentElement.style.setProperty('--txt',$('whiteText').checked?'#fff':'#111');
