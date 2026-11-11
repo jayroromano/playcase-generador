@@ -182,6 +182,7 @@
 <script>
 const $=id=>document.getElementById(id);
 let coverSrc=null;
+let coverObjectUrl=null;
 
 /* ---- acceso con contraseña (si el servidor tiene ACCESS_KEY / access-key.txt) ---- */
 let KEY = localStorage.getItem('pc_key');
@@ -243,12 +244,18 @@ function pintar(list) {
   [...document.querySelectorAll('.res')].forEach(b => b.onclick = () => elegir(list[+b.dataset.i]));
 }
 
-/* el proxy /api/img descarga la carátula por nosotros: mismo origen → exportación PNG sin bloqueos.
-   La contraseña viaja en la URL porque las etiquetas <img> no pueden enviar cabeceras. */
-const proxy = u => '/api/img?u=' + encodeURIComponent(u) + '&key=' + encodeURIComponent(KEY);
+/* Carga la carátula a través del servidor y manda la contraseña en la misma cabecera
+   que la búsqueda. Después usa un blob local para que el PNG se exporte sin CORS. */
+async function loadRemoteCover(url){
+  const response=await api('/api/img?u='+encodeURIComponent(url));
+  if(!response.ok) throw new Error('El servidor de imágenes respondió '+response.status+'.');
+  const blob=await response.blob();
+  if(coverObjectUrl)URL.revokeObjectURL(coverObjectUrl);
+  coverObjectUrl=URL.createObjectURL(blob);
+  setCover(coverObjectUrl);
+}
 
-function elegir(it) {
-  setCover(proxy(it.art));
+async function elegir(it) {
   const songDuration=Number(it.durationSeconds);
   if(Number.isFinite(songDuration)&&songDuration>0){
     durationSeconds=Math.round(songDuration);
@@ -261,9 +268,17 @@ function elegir(it) {
   $('artist').value = it.artist || '';
   $('artist').dispatchEvent(new Event('input'));
   $('fname').value = slug([it.title, it.artist].filter(Boolean).join('-')) || 'playcase';
-  $('spStatus').className = 'ok';
-  $('spStatus').textContent = 'Carátula cargada ✔  (revisa título y artista)';
+  $('spStatus').className = '';
+  $('spStatus').textContent = 'Cargando carátula…';
   $('results').innerHTML = '';
+  try{
+    await loadRemoteCover(it.art);
+    $('spStatus').className = 'ok';
+    $('spStatus').textContent = 'Carátula cargada ✔  (revisa título y artista)';
+  }catch(e){
+    $('spStatus').className = 'err';
+    $('spStatus').textContent = 'Canción cargada, pero no se pudo cargar la carátula ('+e.message+'). Prueba a buscarla otra vez o subirla manualmente.';
+  }
 }
 
 $('btnUrl').onclick = async () => {
