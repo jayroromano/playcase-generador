@@ -57,12 +57,11 @@
   #titleOut{margin-top:26px;font-size:27px;font-weight:800;letter-spacing:.5px;text-transform:uppercase;text-align:center;max-width:420px;line-height:1.1}
   #artistOut{margin-top:6px;font-size:19px;color:var(--muted);text-align:center;max-width:420px;line-height:1.2}
   #player{width:330px;margin-top:26px}
-  #previewProg{display:block;width:100%;height:18px;margin:0;appearance:none;-webkit-appearance:none;background:transparent;color:currentColor;cursor:pointer;--played:0%}
-  #previewProg::-webkit-slider-runnable-track{height:4px;border-radius:2px;background:linear-gradient(to right,currentColor var(--played),rgba(255,255,255,.55) var(--played))}
-  #previewProg::-moz-range-track{height:4px;border-radius:2px;background:rgba(255,255,255,.55)}
-  #previewProg::-moz-range-progress{height:4px;border-radius:2px;background:currentColor}
-  #previewProg::-webkit-slider-thumb{width:13px;height:13px;margin-top:-4.5px;border:0;border-radius:50%;background:currentColor;box-shadow:0 0 0 1px rgba(0,0,0,.15);-webkit-appearance:none}
-  #previewProg::-moz-range-thumb{width:13px;height:13px;border:0;border-radius:50%;background:currentColor;box-shadow:0 0 0 1px rgba(0,0,0,.15)}
+  #progressControl{position:relative;width:100%;height:18px;display:flex;align-items:center}
+  #progressTrack{position:relative;width:100%;height:4px;border-radius:2px;background:rgba(255,255,255,.55)}
+  #progressFill{height:100%;width:0;border-radius:inherit;background:currentColor}
+  #progressThumb{position:absolute;left:0;top:50%;transform:translate(-50%,-50%);width:13px;height:13px;border-radius:50%;background:currentColor;box-shadow:0 0 0 1px rgba(0,0,0,.15)}
+  #previewProg{position:absolute;inset:0;display:block;width:100%;height:100%;margin:0;opacity:0;cursor:pointer}
   #prog{width:100%;accent-color:#1682f4}
   .times{display:flex;justify-content:space-between;font-size:12px;margin-top:6px;color:var(--txt);opacity:.9}
   .icons{display:flex;justify-content:space-between;align-items:center;margin-top:18px;padding:0 6px}
@@ -139,7 +138,13 @@
         <div id="titleOut">TU CANCIÓN</div>
         <div id="artistOut">Artista / Grupo</div>
         <div id="player">
-          <input id="previewProg" type="range" min="0" max="257" step="1" value="0" aria-label="Posición de la canción">
+          <div id="progressControl">
+            <div id="progressTrack" aria-hidden="true">
+              <div id="progressFill"></div>
+              <span id="progressThumb"></span>
+            </div>
+            <input id="previewProg" type="range" min="0" max="257" step="1" value="0" aria-label="Posición de la canción">
+          </div>
           <div class="times"><span id="time1">0:00</span><span id="time2">4:17</span></div>
           <div class="icons">
             <svg viewBox="0 0 24 24" fill="currentColor"><path d="M10.59 9.17 5.41 4 4 5.41l5.17 5.17 1.42-1.41zM14.5 4l2.04 2.04L4 18.59 5.41 20 17.96 7.46 20 9.5V4h-5.5zm.33 9.41-1.41 1.41 3.13 3.13L14.5 20H20v-5.5l-2.04 2.04-3.13-3.13z"/></svg>
@@ -296,7 +301,8 @@ function syncPlayback(){
   $('time2').textContent=formatTime(durationSeconds);
   const percent=(currentSeconds/durationSeconds)*100;
   $('progVal').textContent=Math.round(percent)+'%';
-  $('previewProg').style.setProperty('--played',percent+'%');
+  $('progressFill').style.width=percent+'%';
+  $('progressThumb').style.left=percent+'%';
 }
 function setPlaybackPosition(value){
   currentSeconds=Math.round(Number(value)||0);
@@ -355,7 +361,7 @@ async function exportar(bg,sufijo){
   const el=$('design');
   const name=($('fname').value.trim()||'playcase')+sufijo+'.png';
   try{
-    const canvas=await html2canvas(el,{backgroundColor:bg,scale:2,useCORS:true});
+    const canvas=await html2canvas(el,{backgroundColor:bg,scale:2,useCORS:true,onclone:doc=>{const slider=doc.getElementById('previewProg');if(slider)slider.style.display='none';}});
     canvas.toBlob(b=>{
       const a=document.createElement('a');
       a.href=URL.createObjectURL(b);a.download=name;a.click();
