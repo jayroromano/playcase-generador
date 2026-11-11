@@ -28,6 +28,7 @@ async function itunesSearch(song, artist) {
   return songs.map(it => ({
     title: it.trackName, artist: it.artistName, album: it.collectionName || '',
     url: it.trackViewUrl, art: art1200(it.artworkUrl100),
+    durationSeconds: it.trackTimeMillis ? Math.round(it.trackTimeMillis / 1000) : null,
   }));
 }
 
@@ -38,7 +39,7 @@ async function deezerSearch(song, artist) {
   const j = await r.json();
   return (j.data || []).filter(d => d.album && d.album.cover_xl).map(d => ({
     title: d.title, artist: d.artist && d.artist.name, album: d.album.title || '',
-    url: d.link, art: d.album.cover_xl,
+    url: d.link, art: d.album.cover_xl, durationSeconds: Number(d.duration) || null,
   }));
 }
 
@@ -88,7 +89,10 @@ async function resolveApple(u) {
   const j = await r.json();
   const it = (j.results || []).find(x => x.wrapperType === 'track');
   if (!it) return { error: 'Apple no devolvió esa canción.' };
-  return { title: it.trackName, artist: it.artistName, album: it.collectionName || '', art: art1200(it.artworkUrl100) };
+  return {
+    title: it.trackName, artist: it.artistName, album: it.collectionName || '', art: art1200(it.artworkUrl100),
+    durationSeconds: it.trackTimeMillis ? Math.round(it.trackTimeMillis / 1000) : null,
+  };
 }
 
 async function resolveSpotify(u) {
@@ -115,7 +119,10 @@ async function resolveSpotify(u) {
     const imgs = ((j.album || {}).images || []).sort((a, b) => (b.width || 0) - (a.width || 0));
     if (imgs[0]) art = imgs[0].url;
   }
-  return { title, artist, album: (j.album || {}).name || '', art };
+  return {
+    title, artist, album: (j.album || {}).name || '', art,
+    durationSeconds: j.duration_ms ? Math.round(j.duration_ms / 1000) : null,
+  };
 }
 
 async function resolveCovers(url) {

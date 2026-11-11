@@ -203,7 +203,7 @@ function pintar(list) {
   $('results').innerHTML = list.map((it, i) => `
     <button class="res" data-i="${i}">
       <img src="${esc(it.art)}" alt="">
-      <span><b>${esc(it.title)}</b><br>${esc(it.artist || '')}${it.album ? '<br><i>' + esc(it.album) + '</i>' : ''}</span>
+      <span><b>${esc(it.title)}</b><br>${esc(it.artist || '')}${it.album ? '<br><i>' + esc(it.album) + '</i>' : ''}${it.durationSeconds ? '<br><i>Duración: ' + formatTime(it.durationSeconds) + '</i>' : ''}</span>
     </button>`).join('');
   [...document.querySelectorAll('.res')].forEach(b => b.onclick = () => elegir(list[+b.dataset.i]));
 }
@@ -214,6 +214,13 @@ const proxy = u => '/api/img?u=' + encodeURIComponent(u) + '&key=' + encodeURICo
 
 function elegir(it) {
   setCover(proxy(it.art));
+  const songDuration=Number(it.durationSeconds);
+  if(Number.isFinite(songDuration)&&songDuration>0){
+    durationSeconds=Math.round(songDuration);
+    $('t2').value=formatTime(durationSeconds);
+  }
+  currentSeconds=0;
+  syncPlayback();
   $('title').value = (it.title || '').toUpperCase();
   $('title').dispatchEvent(new Event('input'));
   $('artist').value = it.artist || '';
