@@ -86,6 +86,7 @@
     <input id="qArtist" type="text" placeholder="Artista, ej: Quevedo" style="margin-top:8px">
     <button id="btnSearch">Buscar carátula</button>
     <div id="spStatus"></div>
+    <button id="btnChangeKey" type="button" style="display:none;background:#3a3a42;color:#fff;padding:7px 9px;font-size:12px;align-self:flex-start">Cambiar contraseña guardada</button>
     <div id="results"></div>
 
     <label>… o pega el enlace de la canción (Spotify / Apple Music)</label>
@@ -185,7 +186,25 @@ let coverSrc=null;
 /* ---- acceso con contraseña (si el servidor tiene ACCESS_KEY / access-key.txt) ---- */
 let KEY = localStorage.getItem('pc_key');
 if (KEY === null) { KEY = prompt('Contraseña de acceso (vacía si no hay clave configurada):') || ''; localStorage.setItem('pc_key', KEY); }
-const api = p => fetch(p, { headers: { 'x-key': KEY } });
+const api = async p => {
+  const response = await fetch(p, { headers: { 'x-key': KEY } });
+  if (response.status === 401) {
+    localStorage.removeItem('pc_key');
+    KEY = '';
+    $('btnChangeKey').style.display = 'block';
+    throw new Error('La contraseña guardada no es correcta. Pulsa «Cambiar contraseña guardada» para volver a introducirla.');
+  }
+  return response;
+};
+$('btnChangeKey').onclick = () => {
+  const nextKey = prompt('Introduce la contraseña correcta:');
+  if (nextKey === null) return;
+  KEY = nextKey;
+  localStorage.setItem('pc_key', KEY);
+  $('btnChangeKey').style.display = 'none';
+  $('spStatus').className = 'ok';
+  $('spStatus').textContent = 'Contraseña actualizada en este móvil. Vuelve a intentarlo.';
+};
 
 /* ---- búsqueda de carátula (iTunes + Deezer vía servidor) ---- */
 const EN_SERVIDOR = location.protocol.startsWith('http');
