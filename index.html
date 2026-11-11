@@ -21,7 +21,7 @@
   .layout{display:flex;gap:24px;padding:22px;align-items:flex-start;justify-content:center;flex-wrap:wrap;max-width:1240px;margin:0 auto}
   .panel{width:330px;background:#17171c;border:1px solid #2a2a30;border-radius:12px;padding:18px;display:flex;flex-direction:column;gap:12px}
   .panel label{font-size:12px;color:#9a9aa2;text-transform:uppercase;letter-spacing:.6px}
-  .panel input[type=text],.panel input:not([type]){
+  .panel input[type=text],.panel input:not([type]),.panel select{
     width:100%;padding:9px 10px;border-radius:8px;border:1px solid #33333b;background:#0d0d10;color:#eee;font-size:14px}
   .panel button{padding:10px;border-radius:8px;border:0;font-weight:700;cursor:pointer;font-size:14px}
   #btnSpotify{background:#17b04a;color:#fff}
@@ -50,7 +50,7 @@
     display:flex;flex-direction:column;align-items:center;
     color:var(--txt);
   }
-  #brand{font-weight:800;letter-spacing:3px;font-size:20px;margin-bottom:18px}
+  #brandMark{font-weight:800;letter-spacing:3px;font-size:20px;margin-bottom:18px}
   #coverBox{width:330px;height:330px;background:#202024;display:flex;align-items:center;justify-content:center;overflow:hidden}
   #coverBox img{width:100%;height:100%;object-fit:cover;display:block}
   #coverBox .ph{color:#666;font-size:13px;text-align:center;padding:10px}
@@ -102,6 +102,17 @@
     <label>Artista</label>
     <input id="artist" type="text" placeholder="Quevedo, Elvis Crespo">
 
+    <label for="fontChoice">Tipografía del diseño</label>
+    <select id="fontChoice">
+      <option value="segoe">Segoe UI (actual)</option>
+      <option value="arial">Arial</option>
+      <option value="trebuchet">Trebuchet MS</option>
+      <option value="verdana">Verdana</option>
+      <option value="georgia">Georgia</option>
+      <option value="impact">Impact</option>
+      <option value="courier">Courier New</option>
+    </select>
+
     <div class="row">
       <div style="flex:1"><label>Transcurrido</label><input id="t1" type="text" value="0:00"></div>
       <div style="flex:1"><label>Duración</label><input id="t2" type="text" value="4:17"></div>
@@ -111,7 +122,7 @@
     <input id="prog" type="range" min="0" max="257" step="1" value="0" style="width:100%">
 
     <label class="chk"><input id="whiteText" type="checkbox" checked> Texto e iconos en blanco</label>
-    <label class="chk"><input id="brand" type="checkbox"> Mostrar marca PLAYCASE</label>
+    <label class="chk"><input id="showBrand" type="checkbox"> Mostrar marca PLAYCASE</label>
 
     <label>Nombre de archivo</label>
     <input id="fname" type="text" placeholder="1201_la-graciosa">
@@ -123,7 +134,7 @@
   <div>
     <div id="stage">
       <div id="design">
-        <div id="brand" style="display:none">PL<b style="color:#17b04a">A</b>YCASE</div>
+        <div id="brandMark" style="display:none">PL<b style="color:#17b04a">A</b>YCASE</div>
         <div id="coverBox"><div class="ph">Pega un enlace de Spotify<br>o sube una imagen</div></div>
         <div id="titleOut">TU CANCIÓN</div>
         <div id="artistOut">Artista / Grupo</div>
@@ -225,7 +236,7 @@ function elegir(it) {
   $('title').dispatchEvent(new Event('input'));
   $('artist').value = it.artist || '';
   $('artist').dispatchEvent(new Event('input'));
-  if (!$('fname').value.trim()) $('fname').value = slug(it.title || '');
+  $('fname').value = slug([it.title, it.artist].filter(Boolean).join('-')) || 'playcase';
   $('spStatus').className = 'ok';
   $('spStatus').textContent = 'Carátula cargada ✔  (revisa título y artista)';
   $('results').innerHTML = '';
@@ -313,11 +324,28 @@ $('t2').addEventListener('change',()=>{
 });
 syncPlayback();
 
-$('whiteText').onchange=$('brand').onchange=()=>{
+function applyDesignOptions(){
   document.documentElement.style.setProperty('--txt',$('whiteText').checked?'#fff':'#111');
   document.documentElement.style.setProperty('--muted',$('whiteText').checked?'#b9b9b9':'#555');
-  $('brand').style.display=$('brand').checked?'block':'none';
+  $('brandMark').style.display=$('showBrand').checked?'block':'none';
+}
+$('whiteText').onchange=$('showBrand').onchange=applyDesignOptions;
+applyDesignOptions();
+
+const designFonts={
+  segoe:'"Segoe UI",Helvetica,Arial,sans-serif',
+  arial:'Arial,Helvetica,sans-serif',
+  trebuchet:'"Trebuchet MS",sans-serif',
+  verdana:'Verdana,sans-serif',
+  georgia:'Georgia,serif',
+  impact:'Impact,Haettenschweiler,"Arial Narrow Bold",sans-serif',
+  courier:'"Courier New",monospace',
 };
+function applyDesignFont(){
+  $('design').style.fontFamily=designFonts[$('fontChoice').value]||designFonts.segoe;
+}
+$('fontChoice').addEventListener('change',applyDesignFont);
+applyDesignFont();
 
 function esc(s){const d=document.createElement('div');d.textContent=s;return d.innerHTML;}
 function slug(s){return s.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,'');}
