@@ -71,9 +71,28 @@
   .note{background:#17171c;border:1px solid #2a2a30;border-radius:12px;padding:14px 16px;margin:0 auto 24px;color:#9a9aa2;font-size:13px;line-height:1.6;width:calc(100% - 44px);max-width:1240px}
   .note b{color:#ddd}
   @media(max-width:700px){.layout{padding:16px;gap:18px}.panel{width:min(100%,420px)}#stage{width:min(600px,95vw)}#design{width:100%}.note{width:calc(100% - 32px)}}
+/* PLAYCASE: interfaz para clientes */
+html.modo-cliente #btnChangeKey,
+html.modo-cliente #fontChoice,
+html.modo-cliente #fname,
+html.modo-cliente #btnPng,
+html.modo-cliente #btnPngDark {
+  display: none !important;
+}
+html.modo-cliente #btnConfirmar {
+  display: block !important;
+}
 </style>
 </head>
 <body>
+  <script>
+  const MODO_CLIENTE =
+    new URLSearchParams(window.location.search).get('modo') === 'cliente';
+
+  if (MODO_CLIENTE) {
+    document.documentElement.classList.add('modo-cliente');
+  }
+</script>
 <header>
   <div class="logo">PL<b>A</b>YCASE</div>
   <small>· generador de diseños</small>
@@ -129,6 +148,14 @@
 
     <button id="btnPng">Descargar PNG (fondo transparente)</button>
     <button id="btnPngDark" style="background:#3a3a42;color:#fff">Descargar comprobación (fondo oscuro)</button>
+  
+    <button
+  id="btnConfirmar"
+  type="button"
+  style="display:none;background:#17b04a;color:white"
+>
+  Confirmar mi diseño
+</button>
   </div>
 
   <div>
@@ -407,6 +434,58 @@ async function exportar(bg,sufijo){
 }
 $('btnPng').onclick=()=>exportar(null,'');
 $('btnPngDark').onclick=()=>exportar('#232327','_prueba-fondo');
+$('btnConfirmar').onclick = async () => {
+  const boton = $('btnConfirmar');
+
+  try {
+    boton.disabled = true;
+    boton.textContent = 'Preparando diseño...';
+
+    const canvas = await html2canvas($('design'), {
+      backgroundColor: null,
+      scale: 2,
+      useCORS: true,
+      onclone: doc => {
+        const slider = doc.getElementById('previewProg');
+        if (slider) slider.style.display = 'none';
+      }
+    });
+
+    const blob = await new Promise((resolve, reject) => {
+      canvas.toBlob(
+        resultado => resultado ? resolve(resultado) : reject(new Error('No se pudo generar el PNG')),
+        'image/png'
+      );
+    });
+
+    console.log('PLAYCASE: diseño generado', blob.size, 'bytes');
+    const designId = 'pc_' + Date.now();
+
+const payload = {
+  type: 'playcase-design-confirmed',
+  designId,
+  song: $('title').value.trim(),
+  artist: $('artist').value.trim(),
+  minute: $('t1').value.trim(),
+  previewDataUrl: canvas.toDataURL('image/png')
+};
+
+if (window.opener && !window.opener.closed) {
+  window.opener.postMessage(payload, '*');
+  alert('Diseño confirmado. Ya puedes volver a la tienda.');
+  window.close();
+} else {
+  console.log('PLAYCASE payload:', payload);
+  alert('¡Diseño generado correctamente!');
+}
+
+  } catch (error) {
+    alert('No se pudo generar el diseño: ' + error.message);
+  } finally {
+    boton.disabled = false;
+    boton.textContent = 'Confirmar mi diseño';
+  }
+};
 </script>
 </body>
 </html>
