@@ -1,20 +1,39 @@
 /* Playcase · /api/img — descarga la carátula por nosotros para que el PNG nunca salga bloqueado por CORS */
-const { UA, isArtHost, checkKey } = require('../lib-covers');
+const {
+  preflight, checkRequestOrigin, sendJson, fail, methodNotAllowed,
+  authorize, rateLimit, validateImageUrl, fetchImage, hasValidKey,
+} = require('../lib-security');
+
+const METHODS = ['GET', 'OPTIONS'];
 
 module.exports = async function handler(req, res) {
-  const u = new URL(req.url, 'http://x');
-  if (!checkKey(req, u)) { res.status(401).end('Contraseña incorrecta'); return; }
+  if (preflight(req, res, METHODS)) return;
+
+  const origin = checkRequestOrigin(req);
+  if (!origin.ok) return sendJson(res, 403, { error: 'Origen no permitido.' });
+  if (req.method !== 'GET') return methodNotAllowed(res, METHODS);
+  if (!authorize(req, res)) return;
+
+  const limit = hasValidKey(req) ? 180 : 60;
+  if (!rateLimit(req, res, { name: 'img', limit })) {
+    return sendJson(res, 429, { error: 'Demasiadas descargas. Espera un minuto.' });
+  }
+
+  const u = new URL(req.url, 'http://localhost');
   const target = u.searchParams.get('u') || '';
-  if (!isArtHost(target)) { res.status(400).end('Host no permitido'); return; }
+  if (!validateImageUrl(target)) return sendJson(res, 400, { error: 'URL de imagen no permitida.' });
+
   try {
-    const r = await fetch(target, UA);
-    if (!r.ok) { res.status(r.status).end('HTTP ' + r.status); return; }
-    const buf = Buffer.from(await r.arrayBuffer());
-    res.setHeader('Content-Type', r.headers.get('content-type') || 'image/jpeg');
+    const image = await fetchImage(target);
+    res.statusCode = 200;
+    res.setHeader('Content-Type', image.mimeType);
+    res.setHeader('Content-Length', String(image.buffer.length));
     res.setHeader('Cache-Control', 'public, max-age=86400');
-    res.status(200).end(buf);
+    res.setHeader('X-Content-Type-Options', 'nosniff');
+    res.end(image.buffer);
   } catch (e) {
-    res.status(500).end(e.message);
+    fail(res, e, 'No se pudo descargar la carátula.');
   }
 };
+
 module.exports.default = module.exports;

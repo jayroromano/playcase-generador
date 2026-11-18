@@ -1,16 +1,36 @@
 /* Playcase · /api/search — búsqueda por canción y artista */
-const { searchCovers, checkKey } = require('../lib-covers');
+const { searchCovers } = require('../lib-covers');
+const {
+  preflight, checkRequestOrigin, sendJson, fail, methodNotAllowed,
+  authorize, rateLimit, cleanText, hasValidKey,
+} = require('../lib-security');
+
+const METHODS = ['GET', 'OPTIONS'];
 
 module.exports = async function handler(req, res) {
-  const u = new URL(req.url, 'http://x');
-  if (!checkKey(req, u)) { res.status(401).json({ error: 'Contraseña incorrecta' }); return; }
-  const song = u.searchParams.get('song') || '';
-  const artist = u.searchParams.get('artist') || '';
+  if (preflight(req, res, METHODS)) return;
+
+  const origin = checkRequestOrigin(req);
+  if (!origin.ok) return sendJson(res, 403, { error: 'Origen no permitido.' });
+  if (req.method !== 'GET') return methodNotAllowed(res, METHODS);
+  if (!authorize(req, res)) return;
+
+  const limit = hasValidKey(req) ? 90 : 30;
+  if (!rateLimit(req, res, { name: 'search', limit })) {
+    return sendJson(res, 429, { error: 'Demasiadas búsquedas. Espera un minuto.' });
+  }
+
+  const u = new URL(req.url, 'http://localhost');
+  const song = cleanText(u.searchParams.get('song'), 120);
+  const artist = cleanText(u.searchParams.get('artist'), 120);
+  if (!song && !artist) return sendJson(res, 400, { error: 'Indica al menos la canción o el artista.' });
+
   try {
     const results = await searchCovers(song, artist);
-    res.status(200).json({ results });
+    sendJson(res, 200, { results });
   } catch (e) {
-    res.status(500).json({ error: e.message, results: [] });
+    fail(res, e, 'No se pudo buscar la carátula.');
   }
 };
+
 module.exports.default = module.exports;

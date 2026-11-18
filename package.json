@@ -1,0 +1,13 @@
+{
+  "name": "playcase-generador",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Generador de diseños de fundas musicales PLAYCASE",
+  "scripts": {
+    "start": "node servidor.js",
+    "test": "node --test tests/security.test.js"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}

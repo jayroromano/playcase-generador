@@ -2,6 +2,11 @@
 access-key.txt
 spotify-credentials.json
 
+# Variables de entorno locales (la plantilla sí se sube)
+.env
+.env.*
+!.env.example
+
 # Archivos generados por Vercel y dependencias
 .vercel/
 node_modules/

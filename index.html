@@ -71,17 +71,56 @@
   .note{background:#17171c;border:1px solid #2a2a30;border-radius:12px;padding:14px 16px;margin:0 auto 24px;color:#9a9aa2;font-size:13px;line-height:1.6;width:calc(100% - 44px);max-width:1240px}
   .note b{color:#ddd}
   @media(max-width:700px){.layout{padding:16px;gap:18px}.panel{width:min(100%,420px)}#stage{width:min(600px,95vw)}#design{width:100%}.note{width:calc(100% - 32px)}}
-/* PLAYCASE: interfaz para clientes */
-html.modo-cliente #btnChangeKey,
+/* PLAYCASE: interfaz para clientes (ocultar es solo estético; la seguridad real está en el servidor) */
+html.modo-cliente #btnLogout,
 html.modo-cliente #fontChoice,
 html.modo-cliente #fname,
 html.modo-cliente #btnPng,
-html.modo-cliente #btnPngDark {
+html.modo-cliente #btnPngDark,
+html.modo-cliente #manualUploadLabel,
+html.modo-cliente #fileImg {
   display: none !important;
 }
 html.modo-cliente #btnConfirmar {
   display: block !important;
 }
+html.modo-cliente .note {
+  display: none !important;
+}
+/* PLAYCASE: puerta de acceso al modo administrador (la sesión la valida el servidor) */
+html.modo-cliente #adminGate {
+  display: none !important;
+}
+html.admin-bloqueado .layout,
+html.admin-bloqueado .note {
+  display: none !important;
+}
+#adminGate{
+  min-height:calc(100vh - 60px);display:flex;align-items:center;justify-content:center;padding:24px;
+}
+#adminGate[hidden]{display:none !important}
+.gate-card{
+  width:min(100%,380px);background:#17171c;border:1px solid #2a2a30;border-radius:12px;padding:22px;
+  display:flex;flex-direction:column;gap:12px;
+}
+.gate-card .logo{text-align:center;font-weight:800;letter-spacing:2px;font-size:18px}
+.gate-card .logo b{color:#17b04a}
+.gate-card p{margin:0;color:#9a9aa2;font-size:13px;line-height:1.5;text-align:center}
+.gate-card label{font-size:12px;color:#9a9aa2;text-transform:uppercase;letter-spacing:.6px}
+.gate-card input{
+  width:100%;padding:10px;border-radius:8px;border:1px solid #33333b;background:#0d0d10;color:#eee;font-size:14px;
+}
+.gate-card button{
+  padding:10px;border-radius:8px;border:0;font-weight:700;cursor:pointer;font-size:14px;
+  background:#17b04a;color:#fff;
+}
+.gate-card button:hover{background:#1bc653}
+.gate-card button:disabled{opacity:.6;cursor:wait}
+#gateFields{display:flex;flex-direction:column;gap:10px}
+#gateFields[hidden]{display:none !important}
+#gateStatus{font-size:12px;color:#888;min-height:15px;text-align:center}
+#gateStatus.err{color:#ff7a7a}
+#gateStatus.ok{color:#5bd98a}
 </style>
 </head>
 <body>
@@ -91,12 +130,27 @@ html.modo-cliente #btnConfirmar {
 
   if (MODO_CLIENTE) {
     document.documentElement.classList.add('modo-cliente');
+  } else {
+    document.documentElement.classList.add('admin-bloqueado');
   }
 </script>
 <header>
   <div class="logo">PL<b>A</b>YCASE</div>
   <small>· generador de diseños</small>
 </header>
+
+<div id="adminGate">
+  <form class="gate-card" id="gateForm" autocomplete="off">
+    <div class="logo">PL<b>A</b>YCASE</div>
+    <p id="gateText">Comprobando la sesión de administrador…</p>
+    <div id="gateFields" hidden>
+      <label for="adminKey">Contraseña de administrador</label>
+      <input id="adminKey" type="password" name="admin-key" autocomplete="current-password" spellcheck="false">
+      <button id="gateSubmit" type="submit">Entrar</button>
+    </div>
+    <div id="gateStatus" role="status"></div>
+  </form>
+</div>
 
 <div class="layout">
   <div class="panel">
@@ -105,14 +159,14 @@ html.modo-cliente #btnConfirmar {
     <input id="qArtist" type="text" placeholder="Artista, ej: Quevedo" style="margin-top:8px">
     <button id="btnSearch">Buscar carátula</button>
     <div id="spStatus"></div>
-    <button id="btnChangeKey" type="button" style="display:none;background:#3a3a42;color:#fff;padding:7px 9px;font-size:12px;align-self:flex-start">Cambiar contraseña guardada</button>
+    <button id="btnLogout" type="button" style="display:none;background:#3a3a42;color:#fff;padding:7px 9px;font-size:12px;align-self:flex-start">Cerrar sesión</button>
     <div id="results"></div>
 
     <label>… o pega el enlace de la canción (Spotify / Apple Music)</label>
     <input id="qUrl" type="text" placeholder="https://open.spotify.com/track/…">
     <button id="btnUrl" style="margin-top:8px">Cargar por enlace</button>
 
-    <label>… o sube la carátula manualmente</label>
+    <label id="manualUploadLabel">… o sube la carátula manualmente</label>
     <input id="fileImg" type="file" accept="image/*">
 
     <label>Título de la canción</label>
@@ -211,37 +265,234 @@ const $=id=>document.getElementById(id);
 let coverSrc=null;
 let coverObjectUrl=null;
 
-/* ---- acceso con contraseña (si el servidor tiene ACCESS_KEY / access-key.txt) ---- */
-let KEY = localStorage.getItem('pc_key');
-if (KEY === null) { KEY = prompt('Contraseña de acceso (vacía si no hay clave configurada):') || ''; localStorage.setItem('pc_key', KEY); }
+/* ---- configuración pública y sesión de administrador (la clave nunca se guarda) ---- */
+const EN_SERVIDOR = location.protocol.startsWith('http');
+const EN_IFRAME = window.parent !== window;
+const CONFIG_POR_DEFECTO = { version: '1', publicApi: false, requiresKey: false, adminAuth: false, allowedOrigins: [] };
+let PLAYCASE_CONFIG = CONFIG_POR_DEFECTO;
+let SESION_ADMIN = false;
+
+async function cargarConfig() {
+  if (!EN_SERVIDOR) return;
+  try {
+    const r = await fetch('/api/config', { cache: 'no-store' });
+    if (!r.ok) return;
+    const cfg = await r.json();
+    if (!cfg || typeof cfg !== 'object') return;
+    PLAYCASE_CONFIG = {
+      version: String(cfg.version || '1'),
+      publicApi: cfg.publicApi === true,
+      requiresKey: cfg.requiresKey === true,
+      adminAuth: cfg.adminAuth === true,
+      allowedOrigins: Array.isArray(cfg.allowedOrigins)
+        ? cfg.allowedOrigins.filter(o => typeof o === 'string')
+        : [],
+    };
+  } catch (e) { /* seguimos con la configuración por defecto */ }
+}
+
+/* La puerta se apoya en la cookie HttpOnly emitida por el servidor. */
+const CONTROLES_ADMIN = [
+  'qSong', 'qArtist', 'btnSearch', 'qUrl', 'btnUrl', 'title', 'artist',
+  'fontChoice', 't1', 't2', 'prog', 'previewProg', 'whiteText', 'showBrand',
+  'fname', 'btnPng', 'btnPngDark', 'fileImg',
+];
+
+function habilitarControles(habilitados) {
+  for (const id of CONTROLES_ADMIN) {
+    const el = $(id);
+    if (el) el.disabled = !habilitados;
+  }
+}
+
+function bloquearAdmin(mensaje, permitirAcceso) {
+  SESION_ADMIN = false;
+  document.documentElement.classList.add('admin-bloqueado');
+  $('adminGate').hidden = false;
+  $('gateText').textContent = mensaje;
+  $('gateFields').hidden = !permitirAcceso;
+  $('gateStatus').className = '';
+  $('gateStatus').textContent = '';
+  $('adminKey').value = '';
+  habilitarControles(false);
+  if (permitirAcceso) setTimeout(() => { try { $('adminKey').focus(); } catch (e) {} }, 0);
+}
+
+function desbloquearAdmin() {
+  SESION_ADMIN = true;
+  document.documentElement.classList.remove('admin-bloqueado');
+  $('adminGate').hidden = true;
+  $('gateFields').hidden = false;
+  $('gateStatus').className = '';
+  $('gateStatus').textContent = '';
+  $('adminKey').value = '';
+  habilitarControles(true);
+  $('btnLogout').style.display = 'block';
+}
+
+async function comprobarSesionAdmin() {
+  if (!PLAYCASE_CONFIG.adminAuth) {
+    bloquearAdmin('El acceso de administrador no está configurado. Define ADMIN_KEY o ACCESS_KEY en el servidor.', false);
+    return;
+  }
+  try {
+    const r = await fetch('/api/admin/session', { cache: 'no-store' });
+    if (r.ok) {
+      const j = await r.json().catch(() => ({}));
+      if (j && j.authenticated === true) { desbloquearAdmin(); return; }
+    }
+    if (r.status === 503) {
+      bloquearAdmin('El acceso de administrador no está configurado. Define ADMIN_KEY o ACCESS_KEY en el servidor.', false);
+      return;
+    }
+  } catch (e) { /* sin conexión: mostramos el formulario */ }
+  bloquearAdmin('Introduce la contraseña de administrador para continuar.', true);
+}
+
+async function entrarAdmin(evento) {
+  evento.preventDefault();
+  const clave = $('adminKey').value;
+  if (!clave) {
+    $('gateStatus').className = 'err';
+    $('gateStatus').textContent = 'Escribe la contraseña.';
+    return;
+  }
+  const boton = $('gateSubmit');
+  boton.disabled = true;
+  $('gateStatus').className = '';
+  $('gateStatus').textContent = 'Comprobando…';
+  try {
+    const r = await fetch('/api/admin/login', {
+      method: 'POST',
+      headers: { 'x-admin-key': clave },
+      cache: 'no-store',
+    });
+    if (r.ok) {
+      $('adminKey').value = '';
+      desbloquearAdmin();
+      $('spStatus').className = 'ok';
+      $('spStatus').textContent = 'Sesión de administrador iniciada.';
+      return;
+    }
+    const j = await r.json().catch(() => ({}));
+    $('gateStatus').className = 'err';
+    $('gateStatus').textContent = j.error || 'No se pudo iniciar sesión.';
+    $('adminKey').value = '';
+    $('adminKey').focus();
+  } catch (e) {
+    $('gateStatus').className = 'err';
+    $('gateStatus').textContent = 'No se pudo conectar con el servidor.';
+  } finally {
+    boton.disabled = false;
+  }
+}
+
+async function salirAdmin() {
+  $('btnLogout').disabled = true;
+  try { await fetch('/api/admin/logout', { method: 'POST', cache: 'no-store' }); } catch (e) { /* da igual */ }
+  $('btnLogout').disabled = false;
+  $('btnLogout').style.display = 'none';
+  bloquearAdmin('Sesión cerrada. Introduce la contraseña para volver a entrar.', true);
+}
+
+/* Las APIs usan la cookie de sesión automáticamente (fetch same-origin). */
 const api = async p => {
-  const response = await fetch(p, { headers: { 'x-key': KEY } });
+  const response = await fetch(p, { cache: 'no-store' });
   if (response.status === 401) {
-    localStorage.removeItem('pc_key');
-    KEY = '';
-    $('btnChangeKey').style.display = 'block';
-    throw new Error('La contraseña guardada no es correcta. Pulsa «Cambiar contraseña guardada» para volver a introducirla.');
+    if (!MODO_CLIENTE) {
+      bloquearAdmin('La sesión de administrador ha caducado. Vuelve a entrar.', true);
+    }
+    throw new Error(MODO_CLIENTE
+      ? 'El generador no está disponible en este momento.'
+      : 'La sesión de administrador ha caducado.');
+  }
+  if (response.status === 503) {
+    throw new Error('El generador no está disponible en este momento.');
   }
   return response;
 };
-$('btnChangeKey').onclick = () => {
-  const nextKey = prompt('Introduce la contraseña correcta:');
-  if (nextKey === null) return;
-  KEY = nextKey;
-  localStorage.setItem('pc_key', KEY);
-  $('btnChangeKey').style.display = 'none';
-  $('spStatus').className = 'ok';
-  $('spStatus').textContent = 'Contraseña actualizada en este móvil. Vuelve a intentarlo.';
-};
 
-/* ---- búsqueda de carátula (iTunes + Deezer vía servidor) ---- */
-const EN_SERVIDOR = location.protocol.startsWith('http');
-if (!EN_SERVIDOR) {
-  $('btnSearch').disabled = true;
-  $('btnUrl').disabled = true;
-  $('spStatus').className = 'err';
-  $('spStatus').textContent = 'Abre la herramienta con "Iniciar Playcase.bat" (o la web desplegada) para poder buscar carátulas.';
+$('gateForm').addEventListener('submit', entrarAdmin);
+$('btnLogout').onclick = salirAdmin;
+
+/* ---- comunicación con la tienda (postMessage con origen validado) ---- */
+let parentOrigin = null;
+let parentWindow = null;
+
+function origenPermitido(origin) {
+  return !!origin && PLAYCASE_CONFIG.allowedOrigins.includes(origin);
 }
+
+function enviarAlPadre(mensaje) {
+  if (!parentWindow || !parentOrigin) return false;
+  try {
+    parentWindow.postMessage(mensaje, parentOrigin);
+    return true;
+  } catch (e) {
+    return false;
+  }
+}
+
+function iniciarMensajeria() {
+  if (!EN_IFRAME) return;
+
+  try {
+    if (document.referrer) {
+      const ref = new URL(document.referrer);
+      if (origenPermitido(ref.origin)) {
+        parentOrigin = ref.origin;
+        parentWindow = window.parent;
+        enviarAlPadre({ type: 'playcase:ready', version: 1, mode: MODO_CLIENTE ? 'cliente' : 'admin' });
+      }
+    }
+  } catch (e) { /* referrer no disponible */ }
+
+  window.addEventListener('message', event => {
+    if (!origenPermitido(event.origin)) return;
+    const data = event.data;
+    if (!data || typeof data !== 'object' || typeof data.type !== 'string') return;
+
+    if (data.type === 'playcase:init') {
+      parentOrigin = event.origin;
+      parentWindow = event.source || window.parent;
+      enviarAlPadre({ type: 'playcase:ready', version: 1, mode: MODO_CLIENTE ? 'cliente' : 'admin' });
+      return;
+    }
+    if (data.type === 'playcase:ping') {
+      parentOrigin = event.origin;
+      parentWindow = event.source || window.parent;
+      enviarAlPadre({ type: 'playcase:pong', version: 1 });
+    }
+  });
+}
+
+async function iniciar() {
+  await cargarConfig();
+
+  if (!EN_SERVIDOR) {
+    $('btnSearch').disabled = true;
+    $('btnUrl').disabled = true;
+    $('spStatus').className = 'err';
+    $('spStatus').textContent = 'Abre la herramienta con "Iniciar Playcase.bat" (o la web desplegada) para poder buscar carátulas.';
+    iniciarMensajeria();
+    return;
+  }
+
+  iniciarMensajeria();
+
+  if (MODO_CLIENTE) {
+    if (!PLAYCASE_CONFIG.publicApi && PLAYCASE_CONFIG.requiresKey) {
+      $('btnSearch').disabled = true;
+      $('btnUrl').disabled = true;
+      $('spStatus').className = 'err';
+      $('spStatus').textContent = 'El generador no está disponible en este momento.';
+    }
+    return;
+  }
+
+  await comprobarSesionAdmin();
+}
+iniciar();
 
 $('btnSearch').onclick = async () => {
   const st = $('spStatus');
@@ -275,8 +526,13 @@ function pintar(list) {
    que la búsqueda. Después usa un blob local para que el PNG se exporte sin CORS. */
 async function loadRemoteCover(url){
   const response=await api('/api/img?u='+encodeURIComponent(url));
-  if(!response.ok) throw new Error('El servidor de imágenes respondió '+response.status+'.');
+  if(!response.ok){
+    let detalle='';
+    try{ detalle=(await response.json()).error||''; }catch(e){}
+    throw new Error(detalle||('El servidor de imágenes respondió '+response.status+'.'));
+  }
   const blob=await response.blob();
+  if(!/^image\/(png|jpeg|webp)$/.test(blob.type)) throw new Error('La carátula no es una imagen válida.');
   if(coverObjectUrl)URL.revokeObjectURL(coverObjectUrl);
   coverObjectUrl=URL.createObjectURL(blob);
   setCover(coverObjectUrl);
@@ -326,6 +582,8 @@ $('btnUrl').onclick = async () => {
 /* ---- carátula manual ---- */
 $('fileImg').onchange=e=>{
   const f=e.target.files[0]; if(!f)return;
+  if(!/^image\/(png|jpeg|webp)$/.test(f.type)){$('spStatus').className='err';$('spStatus').textContent='Formato no válido. Usa PNG, JPG o WebP.';return;}
+  if(f.size>8*1024*1024){$('spStatus').className='err';$('spStatus').textContent='La imagen supera los 8 MB.';return;}
   const fr=new FileReader();
   fr.onload=()=>{setCover(fr.result);$('spStatus').className='ok';$('spStatus').textContent='Imagen cargada ✔';};
   fr.readAsDataURL(f);
@@ -414,7 +672,7 @@ function applyDesignFont(){
 $('fontChoice').addEventListener('change',applyDesignFont);
 applyDesignFont();
 
-function esc(s){const d=document.createElement('div');d.textContent=s;return d.innerHTML;}
+function esc(s){return String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
 function slug(s){return s.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,'');}
 
 /* ---- exportar PNG ---- */
@@ -436,10 +694,11 @@ $('btnPng').onclick=()=>exportar(null,'');
 $('btnPngDark').onclick=()=>exportar('#232327','_prueba-fondo');
 $('btnConfirmar').onclick = async () => {
   const boton = $('btnConfirmar');
+  const textoOriginal = 'Confirmar mi diseño';
 
   try {
     boton.disabled = true;
-    boton.textContent = 'Preparando diseño...';
+    boton.textContent = 'Preparando diseño…';
 
     const canvas = await html2canvas($('design'), {
       backgroundColor: null,
@@ -458,32 +717,50 @@ $('btnConfirmar').onclick = async () => {
       );
     });
 
-    console.log('PLAYCASE: diseño generado', blob.size, 'bytes');
-    const designId = 'pc_' + Date.now();
+    const azar = (window.crypto && typeof window.crypto.randomUUID === 'function')
+      ? window.crypto.randomUUID()
+      : 'req_' + Date.now() + '_' + Math.random().toString(16).slice(2);
+    const requestId = 'pc_' + azar;
 
-const payload = {
-  type: 'playcase-design-confirmed',
-  designId,
-  song: $('title').value.trim(),
-  artist: $('artist').value.trim(),
-  minute: $('t1').value.trim(),
-  previewDataUrl: canvas.toDataURL('image/png')
-};
+    /* Solo metadatos: el PNG no viaja por postMessage y no se simula ningún guardado. */
+    const payload = {
+      type: 'playcase-design-confirmed',
+      version: 1,
+      status: 'generated',
+      saved: false,
+      requestId,
+      song: $('title').value.trim(),
+      artist: $('artist').value.trim(),
+      minute: $('t1').value.trim(),
+      image: {
+        mimeType: 'image/png',
+        size: blob.size,
+        width: canvas.width,
+        height: canvas.height,
+      },
+    };
 
-if (window.opener && !window.opener.closed) {
-  window.opener.postMessage(payload, '*');
-  alert('Diseño confirmado. Ya puedes volver a la tienda.');
-  window.close();
-} else {
-  console.log('PLAYCASE payload:', payload);
-  alert('¡Diseño generado correctamente!');
-}
+    /* El PNG queda en memoria de esta pestaña para poder comprobarlo desde la consola. */
+    window.playcaseLastDesign = { blob, payload };
+    console.log('PLAYCASE: diseño generado', payload);
 
+    if (enviarAlPadre(payload)) {
+      $('spStatus').className = 'ok';
+      $('spStatus').textContent = 'Diseño generado y enviado a la tienda ✔';
+      boton.textContent = 'Diseño enviado ✔';
+    } else {
+      $('spStatus').className = 'ok';
+      $('spStatus').textContent = 'Diseño generado correctamente. No hay una tienda conectada para recibirlo.';
+      boton.textContent = 'Diseño generado ✔';
+      alert('¡Diseño generado correctamente!');
+    }
+
+    setTimeout(() => { boton.textContent = textoOriginal; }, 2500);
   } catch (error) {
     alert('No se pudo generar el diseño: ' + error.message);
+    boton.textContent = textoOriginal;
   } finally {
     boton.disabled = false;
-    boton.textContent = 'Confirmar mi diseño';
   }
 };
 </script>

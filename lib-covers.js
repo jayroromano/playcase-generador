@@ -1,23 +1,25 @@
 /* Playcase · lógica de búsqueda de carátulas (compartida por el servidor local y las funciones de Vercel) */
 const fs = require('fs');
 const path = require('path');
+const { isArtHost, fetchUpstream, fetchJson, HttpError } = require('./lib-security');
 
-const UA = { headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/126 Safari/537.36' } };
-
-/* hosts de los que SÍ permitimos descargar imágenes (lista blanca) */
-const ART_HOSTS = /(\.mzstatic\.com|\.scdn\.co|\.dzcdn\.net|\.spotifycdn\.com)$/i;
-function isArtHost(u) { try { return ART_HOSTS.test(new URL(u).hostname); } catch { return false; } }
-
-function norm(s) { return (s || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/\s*\(.*?\)\s*/g, ' ').trim(); }
+function norm(s) {
+  return (s || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/\s*\(.*?\)\s*/g, ' ').trim();
+}
 const art1200 = u => u.replace('100x100bb', '1200x1200bb');
+
+/* Solo devolvemos carátulas HTTPS de los hosts permitidos. */
+function safeArt(raw, upscale) {
+  if (!isArtHost(raw)) return null;
+  const candidate = upscale ? art1200(raw) : raw;
+  return isArtHost(candidate) ? candidate : null;
+}
 
 /* ---- búsqueda por nombre de canción y artista ---- */
 async function itunesSearch(song, artist) {
   const term = [song, artist].filter(Boolean).join(' ');
   if (!term) return [];
-  const r = await fetch('https://itunes.apple.com/search?term=' + encodeURIComponent(term) + '&entity=song&limit=10&country=ES', UA);
-  if (!r.ok) throw new Error('iTunes HTTP ' + r.status);
-  const j = await r.json();
+  const j = await fetchJson('https://itunes.apple.com/search?term=' + encodeURIComponent(term) + '&entity=song&limit=10&country=ES');
   const songs = (j.results || []).filter(it => it.wrapperType === 'track' && (!it.kind || it.kind === 'song'));
   const ns = norm(song);
   songs.sort((a, b) => {                      // primero coincidencia exacta de título, luego parcial, luego resto
@@ -27,20 +29,19 @@ async function itunesSearch(song, artist) {
   });
   return songs.map(it => ({
     title: it.trackName, artist: it.artistName, album: it.collectionName || '',
-    url: it.trackViewUrl, art: art1200(it.artworkUrl100),
+    url: it.trackViewUrl, art: safeArt(it.artworkUrl100, true),
     durationSeconds: it.trackTimeMillis ? Math.round(it.trackTimeMillis / 1000) : null,
-  }));
+  })).filter(it => it.art);
 }
 
 async function deezerSearch(song, artist) {
   const q = [song, artist].filter(Boolean).join(' ');
   if (!q) return [];
-  const r = await fetch('https://api.deezer.com/search?q=' + encodeURIComponent(q) + '&limit=8', UA);
-  const j = await r.json();
+  const j = await fetchJson('https://api.deezer.com/search?q=' + encodeURIComponent(q) + '&limit=8');
   return (j.data || []).filter(d => d.album && d.album.cover_xl).map(d => ({
     title: d.title, artist: d.artist && d.artist.name, album: d.album.title || '',
-    url: d.link, art: d.album.cover_xl, durationSeconds: Number(d.duration) || null,
-  }));
+    url: d.link, art: safeArt(d.album.cover_xl, false), durationSeconds: Number(d.duration) || null,
+  })).filter(it => it.art);
 }
 
 async function searchCovers(song, artist) {
@@ -64,7 +65,7 @@ async function spotifyCreds() {
 let spToken = null;
 async function spotifyToken(creds) {
   if (spToken && spToken.exp > Date.now()) return spToken.t;
-  const r = await fetch('https://accounts.spotify.com/api/token', {
+  const r = await fetchUpstream('https://accounts.spotify.com/api/token', {
     method: 'POST',
     headers: {
       Authorization: 'Basic ' + Buffer.from(creds.client_id + ':' + creds.client_secret).toString('base64'),
@@ -72,7 +73,7 @@ async function spotifyToken(creds) {
     },
     body: 'grant_type=client_credentials',
   });
-  if (!r.ok) throw new Error('Spotify token HTTP ' + r.status);
+  if (!r.ok) throw new HttpError(502, 'Spotify no respondió.');
   const j = await r.json();
   spToken = { t: j.access_token, exp: Date.now() + ((j.expires_in || 3600) - 60) * 1000 };
   return spToken.t;
@@ -84,19 +85,22 @@ async function resolveApple(u) {
   let trackId = null;
   if (parts[1] === 'album') trackId = u.searchParams.get('i') || null;
   else if (parts[1] === 'song') trackId = parts[3] || null;
-  if (!trackId) return { error: 'Ese enlace es de un álbum. Pega el enlace de la canción concreta (termina en ?i=…) o busca por nombre.' };
-  const r = await fetch('https://itunes.apple.com/lookup?id=' + trackId, UA);
-  const j = await r.json();
+  if (!trackId || !/^\d{1,20}$/.test(trackId)) {
+    return { error: 'Ese enlace es de un álbum. Pega el enlace de la canción concreta (termina en ?i=…) o busca por nombre.' };
+  }
+  const j = await fetchJson('https://itunes.apple.com/lookup?id=' + encodeURIComponent(trackId));
   const it = (j.results || []).find(x => x.wrapperType === 'track');
   if (!it) return { error: 'Apple no devolvió esa canción.' };
+  const art = safeArt(it.artworkUrl100, true);
+  if (!art) return { error: 'Apple no devolvió una carátula válida.' };
   return {
-    title: it.trackName, artist: it.artistName, album: it.collectionName || '', art: art1200(it.artworkUrl100),
+    title: it.trackName, artist: it.artistName, album: it.collectionName || '', art,
     durationSeconds: it.trackTimeMillis ? Math.round(it.trackTimeMillis / 1000) : null,
   };
 }
 
 async function resolveSpotify(u) {
-  const m = u.pathname.match(/\/track\/([A-Za-z0-9]+)/) || u.pathname.match(/embed\/track\/([A-Za-z0-9]+)/) || [];
+  const m = u.pathname.match(/\/track\/([A-Za-z0-9]{10,40})/) || u.pathname.match(/embed\/track\/([A-Za-z0-9]{10,40})/) || [];
   if (!m[1]) return { error: 'No parece un enlace de canción de Spotify.' };
   const creds = await spotifyCreds();
   if (!creds) return {
@@ -104,8 +108,8 @@ async function resolveSpotify(u) {
     error: 'Para leer enlaces de Spotify hay que dar de alta (una sola vez, gratis) una app en developer.spotify.com y poner sus claves. Mientras tanto: busca por nombre o pega un enlace de Apple Music.',
   };
   const t = await spotifyToken(creds);
-  const r = await fetch('https://api.spotify.com/v1/tracks/' + m[1], { headers: { Authorization: 'Bearer ' + t } });
-  if (!r.ok) return { error: 'Spotify HTTP ' + r.status };
+  const r = await fetchUpstream('https://api.spotify.com/v1/tracks/' + m[1], { headers: { Authorization: 'Bearer ' + t } });
+  if (!r.ok) return { error: 'Spotify no devolvió esa canción.' };
   const j = await r.json();
   const title = j.name;
   const artist = (j.artists || []).map(a => a.name).join(', ');
@@ -117,7 +121,7 @@ async function resolveSpotify(u) {
   } catch (e) {}
   if (!art) {                                      // si no, la de Spotify (640px ≈ 325 dpi, suficiente)
     const imgs = ((j.album || {}).images || []).sort((a, b) => (b.width || 0) - (a.width || 0));
-    if (imgs[0]) art = imgs[0].url;
+    art = imgs.map(x => safeArt(x && x.url, false)).find(Boolean) || null;
   }
   return {
     title, artist, album: (j.album || {}).name || '', art,
@@ -126,23 +130,15 @@ async function resolveSpotify(u) {
 }
 
 async function resolveCovers(url) {
+  if (typeof url !== 'string' || !url || url.length > 2048) return { error: 'Enlace no válido.' };
   let u;
-  try { u = new URL(url); } catch { return { error: 'Enlace no válido.' }; }
-  if (/music\.apple\.com$/i.test(u.hostname)) return resolveApple(u);
-  if (/(open|embed)\.spotify\.com$/i.test(u.hostname) || u.protocol === 'spotify:') return resolveSpotify(u);
+  try { u = new URL(url); } catch (e) { return { error: 'Enlace no válido.' }; }
+  if (u.protocol !== 'https:') return { error: 'El enlace debe empezar por https://.' };
+  if (u.username || u.password) return { error: 'Enlace no válido.' };
+  const host = u.hostname.toLowerCase();
+  if (host === 'music.apple.com' || host.endsWith('.music.apple.com')) return resolveApple(u);
+  if (host === 'open.spotify.com' || host === 'embed.spotify.com' || host === 'play.spotify.com') return resolveSpotify(u);
   return { error: 'Enlaces soportados: Spotify y Apple Music.' };
 }
 
-/* ---- control de acceso opcional (ACCESS_KEY) ---- */
-function accessKey() {
-  if (process.env.ACCESS_KEY) return process.env.ACCESS_KEY;
-  try { return fs.readFileSync(path.join(__dirname, 'access-key.txt'), 'utf8').trim(); } catch (e) { return ''; }
-}
-function checkKey(req, url) {
-  const key = accessKey();
-  if (!key) return true;
-  const given = (req.headers && req.headers['x-key']) || (url && url.searchParams.get('key')) || '';
-  return given === key;
-}
-
-module.exports = { UA, isArtHost, norm, searchCovers, resolveCovers, spotifyCreds, checkKey, accessKey };
+module.exports = { norm, searchCovers, resolveCovers, spotifyCreds };

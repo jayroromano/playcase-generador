@@ -1,0 +1,8 @@
+node_modules/
+tests/
+*.bat
+*.md
+access-key.txt
+spotify-credentials.json
+.env
+.env.*
